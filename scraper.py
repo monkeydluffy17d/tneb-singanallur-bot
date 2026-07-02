@@ -39,7 +39,11 @@ def scrape_tneb():
             print("Could not find the captcha image tag. Trying fallback submission...")
             return
             
-        captcha_url = "https://www.tnebltd.gov.in" + captcha_img['src']
+        # Ensures a forward slash exists between the domain and the image path
+        img_path = captcha_img['src']
+        if not img_path.startswith('/'):
+            img_path = '/' + img_path
+            captcha_url = "https://www.tnebltd.gov.in" + img_path
         
         # Download the dynamic captcha image bytes
         img_bytes = session.get(captcha_url).content
