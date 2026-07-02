@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs at 11:30 AM, 3:30 PM, and 6:30 PM Indian Standard Time (IST) daily.
     # GitHub uses UTC time, so we adjust by subtracting 5.5 hours:
-    - cron: '0 6,10,13,15 * * *'
+    - cron: '36 9,6,10,13 * * *'
   workflow_dispatch: # This adds a magic "Run manually" button so you can test it anytime!
 
 jobs:
