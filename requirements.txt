@@ -1,0 +1,4 @@
+requests
+beautifulsoup4
+ddddocr==1.4.11
+pillow
