@@ -89,50 +89,57 @@ def scrape_tneb():
         print("Submitting verification payload...")
         post_response = session.post(BASE_URL, data=payload, timeout=15)
         final_soup = BeautifulSoup(post_response.text, 'html.parser')
-        
-        # Step 5: Parse the resulting table for Singanallur zones
+
+        # Step 5: Parse the resulting table for your target areas
         table_rows = final_soup.find_all('tr')
         alerts_found = 0
         
+        # Hyper-focused keywords to completely kill the spam seen in image_61e984.png
+        TARGET_KEYWORDS = ["uppilipalayam", "singanallur", "g.v.residency"]
+        
         for row in table_rows:
             cols = [ele.text.strip() for ele in row.find_all('td')]
-            
-            # Safety check: Ensure the row has enough columns to contain layout details
             if cols and len(cols) >= 5:
                 full_row_text = " ".join(cols).lower()
                 
                 # Verify if any local zone keyword hits
                 if any(keyword in full_row_text for keyword in TARGET_KEYWORDS):
-                    # Guard rails for variable grid layouts (handles 5, 6, or 7 column responses)
                     date_val = cols[0]
                     substation_val = cols[2] if len(cols) > 2 else "Unknown"
                     areas_val = cols[3] if len(cols) > 3 else "See Portal"
                     type_val = cols[4] if len(cols) > 4 else "Maintenance"
                     
-                    # Safely handle varying time layouts
                     if len(cols) >= 7:
                         time_val = f"{cols[5]} to {cols[6]}"
                     elif len(cols) == 6:
                         time_val = cols[5]
                     else:
-                        time_val = "09:00 AM to 05:00 PM (Standard)"
+                        time_val = "09:00 AM to 05:00 PM"
 
+                    # Custom brutal warning message for a real outage match
                     alert_message = (
-                        f"⚠️ **TNEB SHUTDOWN NOTICE: SINGANALLUR ZONE**\n\n"
-                        f"📅 **Date:** {date_val}\n"
-                        f"🏢 **Substation:** {substation_val}\n"
-                        f"📍 **Affected Areas / Info:** {areas_val} | {type_val}\n"
-                        f"⏰ **Timing details:** {time_val}\n"
+                        f"⚡ **🚨 FIX YOUR SHT AND PREPARE!** ⚡\n\n"
+                        f"TNEB is coming for your grid, Paari! Don't you dare get caught with flat batteries. 🔌\n\n"
+                        f"📅 **Date:** `{date_val}`\n"
+                        f"🏢 **Substation:** `{substation_val}`\n"
+                        f"⏰ **Timing:** `{time_val}`\n"
+                        f"📍 **Hit Zone:** {areas_val} | {type_val}\n"
                     )
                     send_telegram(alert_message)
                     alerts_found += 1
                     
+        # If the scan finishes and your target keywords were NEVER found in the table
         if alerts_found == 0:
-            print("Scan complete: No upcoming power cuts posted for your grid.")
+            hype_message = (
+                f"✨ **HELL YEAH, PAARI!** ✨\n\n"
+                f"The Singanallur grid refreshed like it just had the best f*cking night of its life! "
+                f"No power cuts detected for your doorstep. Now go break some hearts! 🏍️💨"
+            )
+            send_telegram(hype_message)
+            print("Scan complete: No outages. Hype message sent!")
             
     except Exception as e:
         print(f"An error occurred: {e}")
-
 def send_telegram(message):
     if not BOT_TOKEN or not CHAT_ID:
         print("Error: Telegram credentials are missing from environment variables.")
