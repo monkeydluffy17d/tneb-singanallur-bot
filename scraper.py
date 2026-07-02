@@ -3,6 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 import ddddocr
 import base64
+from urllib.parse import urljoin
 
 # Initialize the free AI Captcha Solver
 ocr = ddddocr.DdddOcr(show_ad=False)
@@ -58,18 +59,15 @@ def scrape_tneb():
             img_bytes = base64.b64decode(encoded)
             print("Successfully extracted embedded base64 captcha image.")
         else:
-            # Clean up the address string to ensure it builds cleanly
-            if not img_path.startswith('/'):
-                img_path = '/' + img_path
-            captcha_url = f"https://www.tnebltd.gov.in{img_path}"
-                
+            # Claude's Fix: Resolve relative paths securely to /outages/ subdirectory
+            captcha_url = urljoin(BASE_URL, img_path)
             print(f"Downloading captcha from: {captcha_url}")
-            # Explicitly pass the original page referer so the server doesn't reject the download
+            
             img_response = session.get(captcha_url, headers={"Referer": BASE_URL}, timeout=10)
             img_bytes = img_response.content
             
             # Diagnostic check to see what the server actually returned
-            if b"html" in img_bytes.lower()[:200]:
+            if b"html" in img_bytes.lower()[:200] or b"<!doctype" in img_bytes.lower()[:200]:
                 print("Warning: The server returned an HTML error page instead of a raw image block!")
                 print(img_bytes[:500].decode('utf-8', errors='ignore'))
                 return
@@ -99,18 +97,34 @@ def scrape_tneb():
         
         for row in table_rows:
             cols = [ele.text.strip() for ele in row.find_all('td')]
-            if cols and len(cols) >= 6:
+            
+            # Safety check: Ensure the row has enough columns to contain layout details
+            if cols and len(cols) >= 5:
                 full_row_text = " ".join(cols).lower()
                 
                 # Verify if any local zone keyword hits
                 if any(keyword in full_row_text for keyword in TARGET_KEYWORDS):
+                    # Guard rails for variable grid layouts (handles 5, 6, or 7 column responses)
+                    date_val = cols[0]
+                    substation_val = cols[2] if len(cols) > 2 else "Unknown"
+                    areas_val = cols[3] if len(cols) > 3 else "See Portal"
+                    type_val = cols[4] if len(cols) > 4 else "Maintenance"
+                    
+                    # Safely handle varying time layouts
+                    if len(cols) >= 7:
+                        time_val = f"{cols[5]} to {cols[6]}"
+                    elif len(cols) == 6:
+                        time_val = cols[5]
+                    else:
+                        time_val = "09:00 AM to 05:00 PM (Standard)"
+
                     alert_message = (
                         f"⚠️ **TNEB SHUTDOWN NOTICE: SINGANALLUR**\n\n"
-                        f"📅 **Date:** {cols[0]}\n"
-                        f"🏢 **Substation:** {cols[2]}\n"
-                        f"📍 **Affected Areas:** {cols[3]}\n"
-                        f"⏰ **Timing:** {cols[5]} to {cols[6]}\n"
-                        f"🔧 **Type:** {cols[4]}"
+                        f"📅 **Date:** {date_val}\n"
+                        f"🏢 **Substation:** {substation_val}\n"
+                        f"📍 **Affected Areas:** {areas_val}\n"
+                        f"⏰ **Timing:** {time_val}\n"
+                        f"🔧 **Type:** {type_val}"
                     )
                     send_telegram(alert_message)
                     alerts_found += 1
