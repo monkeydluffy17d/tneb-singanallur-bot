@@ -119,12 +119,11 @@ def scrape_tneb():
                         time_val = "09:00 AM to 05:00 PM (Standard)"
 
                     alert_message = (
-                        f"⚠️ **TNEB SHUTDOWN NOTICE: SINGANALLUR**\n\n"
+                        f"⚠️ **TNEB SHUTDOWN NOTICE: SINGANALLUR ZONE**\n\n"
                         f"📅 **Date:** {date_val}\n"
                         f"🏢 **Substation:** {substation_val}\n"
-                        f"📍 **Affected Areas:** {areas_val}\n"
-                        f"⏰ **Timing:** {time_val}\n"
-                        f"🔧 **Type:** {type_val}"
+                        f"📍 **Affected Areas / Info:** {areas_val} | {type_val}\n"
+                        f"⏰ **Timing details:** {time_val}\n"
                     )
                     send_telegram(alert_message)
                     alerts_found += 1
