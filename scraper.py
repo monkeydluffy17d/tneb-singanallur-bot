@@ -13,7 +13,7 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # Keywords to match Singanallur and its surrounding feeding stations
-TARGET_KEYWORDS = ["uppilipalayam", "singanallur", "g.v.residency", "trichy road"]
+TARGET_KEYWORDS = ["uppilipalayam", "singanallur", "g.v.residency"]
 BASE_URL = "https://www.tnebltd.gov.in/outages/viewshutdown.xhtml"
 
 def scrape_tneb():
