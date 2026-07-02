@@ -101,29 +101,44 @@ def scrape_tneb():
             cols = [ele.text.strip() for ele in row.find_all('td')]
             if cols and len(cols) >= 5:
                 full_row_text = " ".join(cols).lower()
-                
+
                 # Verify if any local zone keyword hits
                 if any(keyword in full_row_text for keyword in TARGET_KEYWORDS):
                     date_val = cols[0]
                     substation_val = cols[2] if len(cols) > 2 else "Unknown"
                     areas_val = cols[3] if len(cols) > 3 else "See Portal"
-                    type_val = cols[4] if len(cols) > 4 else "Maintenance"
+                    type_text = cols[4] if len(cols) > 4 else ""
                     
+                    # Smart Time & Maintenance Word Separator
+                    raw_time_text = ""
                     if len(cols) >= 7:
-                        time_val = f"{cols[5]} to {cols[6]}"
+                        raw_time_text = f"{cols[5]} {cols[6]}"
                     elif len(cols) == 6:
-                        time_val = cols[5]
+                        raw_time_text = cols[5]
+                        
+                    # Standardize the timing display cleanly
+                    if "09:00" in raw_time_text or "maintenanace" in raw_time_text.lower():
+                        # If they type a messy string like "Maintenanace work to 09:00", we clean it up
+                        time_val = "09:00 AM to 05:00 PM (Standard Window)"
+                    elif any(char.isdigit() for char in raw_time_text):
+                        time_val = raw_time_text
                     else:
                         time_val = "09:00 AM to 05:00 PM"
 
-                    # Custom brutal warning message for a real outage match
+                    # Combine and isolate the work description notes
+                    work_details = "Scheduled Maintenance Work"
+                    if type_text and not any(kw in type_text.lower() for kw in TARGET_KEYWORDS):
+                        work_details = type_text.strip()
+
+                    # Custom brutal warning message with isolated details
                     alert_message = (
                         f"⚡ **🚨 FIX YOUR SHT AND PREPARE!** ⚡\n\n"
                         f"TNEB is coming for your grid, Paari! Don't you dare get caught with flat batteries. 🔌\n\n"
                         f"📅 **Date:** `{date_val}`\n"
                         f"🏢 **Substation:** `{substation_val}`\n"
                         f"⏰ **Timing:** `{time_val}`\n"
-                        f"📍 **Hit Zone:** {areas_val} | {type_val}\n"
+                        f"🔧 **Work Type:** `{work_details}`\n\n"
+                        f"📍 **Hit Zone Areas:** {areas_val}\n"
                     )
                     send_telegram(alert_message)
                     alerts_found += 1
