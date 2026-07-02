@@ -25,19 +25,16 @@ def scrape_tneb():
     })
     
     try:
-        # Step 1: Initial load to establish cookies and extract hidden variables
         print("Connecting to TNEB Portal...")
         response = session.get(BASE_URL, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Pull the required dynamic view state token
         view_state_tag = soup.find('input', {'name': 'javax.faces.ViewState'})
         if not view_state_tag:
-            print("Error: Could not find javax.faces.ViewState. Server might be down or layout changed.")
+            print("Error: Could not find javax.faces.ViewState.")
             return
         view_state = view_state_tag['value']
         
-        # Step 2: Grab the dynamic Captcha Image URL safely
         captcha_img = (
             soup.find('img', id=lambda x: x and 'capimg' in x.lower()) or 
             soup.find('img', src=lambda x: x and 'captcha' in x.lower()) or
@@ -45,105 +42,69 @@ def scrape_tneb():
         )
         
         if not captcha_img:
-            print("Could not find the captcha image tag. Printing image tags found for debugging:")
-            for img in soup.find_all('img'):
-                print(f"ID: {img.get('id')}, SRC: {img.get('src')}")
+            print("Could not find the captcha image tag.")
             return
             
         img_path = captcha_img['src']
+        captcha_url = urljoin(BASE_URL, img_path)
+        print(f"Downloading captcha from: {captcha_url}")
         
-        # Check if the image source is an embedded base64 string instead of a web link
-        if img_path.startswith('data:image'):
-            header, encoded = img_path.split(",", 1)
-            img_bytes = base64.b64decode(encoded)
-            print("Successfully extracted embedded base64 captcha image.")
-        else:
-            # Claude's Fix: Resolve relative paths securely to /outages/ subdirectory
-            captcha_url = urljoin(BASE_URL, img_path)
-            print(f"Downloading captcha from: {captcha_url}")
-            
-            img_response = session.get(captcha_url, headers={"Referer": BASE_URL}, timeout=10)
-            img_bytes = img_response.content
-            
-            # Diagnostic check to see what the server actually returned
-            if b"html" in img_bytes.lower()[:200] or b"<!doctype" in img_bytes.lower()[:200]:
-                print("Warning: The server returned an HTML error page instead of a raw image block!")
-                print(img_bytes[:500].decode('utf-8', errors='ignore'))
-                return
+        img_response = session.get(captcha_url, headers={"Referer": BASE_URL}, timeout=10)
+        img_bytes = img_response.content
 
         # Use AI to read the text in the captcha image
         solved_captcha = ocr.classification(img_bytes).strip()
         print(f"AI Decoded Captcha: {solved_captcha}")
         
-        # Step 3: Build the exact payload extracted from the network logs
         payload = {
             "j_idt5": "j_idt5",
             "j_idt5:appcat_focus": "",
-            "j_idt5:appcat_input": "0435", # Circle code for CBE/METRO
-            "j_idt5:cap": solved_captcha,  # AI-generated answer
+            "j_idt5:appcat_input": "0435", 
+            "j_idt5:cap": solved_captcha,  
             "j_idt5:submit3": "",
             "javax.faces.ViewState": view_state
         }
         
-        # Step 4: Submit form to unlock the data table
         print("Submitting verification payload...")
         post_response = session.post(BASE_URL, data=payload, timeout=15)
         final_soup = BeautifulSoup(post_response.text, 'html.parser')
-
-        # Step 5: Parse the resulting table for your target areas
+        
         table_rows = final_soup.find_all('tr')
         alerts_found = 0
         
-        # Hyper-focused keywords to completely kill the spam seen in image_61e984.png
+        # Hyper-focused keywords to match your doorstep
         TARGET_KEYWORDS = ["uppilipalayam", "singanallur", "g.v.residency"]
         
         for row in table_rows:
             cols = [ele.text.strip() for ele in row.find_all('td')]
-            if cols and len(cols) >= 5:
-                full_row_text = " ".join(cols).lower()
-
-                # Verify if any local zone keyword hits
-                if any(keyword in full_row_text for keyword in TARGET_KEYWORDS):
+            
+            # Match the exact 8-column layout found in image_6cc746.png
+            if cols and len(cols) >= 8:
+                location_text = cols[4].lower()
+                
+                # Check if your specific neighborhood is targeted
+                if any(keyword in location_text for keyword in TARGET_KEYWORDS):
                     date_val = cols[0]
-                    substation_val = cols[2] if len(cols) > 2 else "Unknown"
-                    areas_val = cols[3] if len(cols) > 3 else "See Portal"
-                    type_text = cols[4] if len(cols) > 4 else ""
-                    
-                    # Smart Time & Maintenance Word Separator
-                    raw_time_text = ""
-                    if len(cols) >= 7:
-                        raw_time_text = f"{cols[5]} {cols[6]}"
-                    elif len(cols) == 6:
-                        raw_time_text = cols[5]
-                        
-                    # Standardize the timing display cleanly
-                    if "09:00" in raw_time_text or "maintenanace" in raw_time_text.lower():
-                        # If they type a messy string like "Maintenanace work to 09:00", we clean it up
-                        time_val = "09:00 AM to 05:00 PM (Standard Window)"
-                    elif any(char.isdigit() for char in raw_time_text):
-                        time_val = raw_time_text
-                    else:
-                        time_val = "09:00 AM to 05:00 PM"
+                    substation_val = cols[2]
+                    feeder_val = cols[3]
+                    areas_val = cols[4]
+                    work_details = cols[5]
+                    from_time = cols[6]
+                    to_time = cols[7]
 
-                    # Combine and isolate the work description notes
-                    work_details = "Scheduled Maintenance Work"
-                    if type_text and not any(kw in type_text.lower() for kw in TARGET_KEYWORDS):
-                        work_details = type_text.strip()
-
-                    # Custom brutal warning message with isolated details
+                    # Custom brutal warning message with exact time windows
                     alert_message = (
                         f"⚡ **🚨 FIX YOUR SHT AND PREPARE!** ⚡\n\n"
                         f"TNEB is coming for your grid, Paari! Don't you dare get caught with flat batteries. 🔌\n\n"
                         f"📅 **Date:** `{date_val}`\n"
-                        f"🏢 **Substation:** `{substation_val}`\n"
-                        f"⏰ **Timing:** `{time_val}`\n"
+                        f"🏢 **Substation / Feeder:** `{substation_val} ({feeder_val})`\n"
+                        f"⏰ **Timing:** `{from_time} AM to {to_time} PM`\n"
                         f"🔧 **Work Type:** `{work_details}`\n\n"
                         f"📍 **Hit Zone Areas:** {areas_val}\n"
                     )
                     send_telegram(alert_message)
                     alerts_found += 1
                     
-        # If the scan finishes and your target keywords were NEVER found in the table
         if alerts_found == 0:
             hype_message = (
                 f"✨ **HELL YEAH, PAARI!** ✨\n\n"
